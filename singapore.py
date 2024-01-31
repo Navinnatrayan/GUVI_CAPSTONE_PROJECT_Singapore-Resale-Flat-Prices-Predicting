@@ -1,109 +1,73 @@
-
-# Import necessary libraries
 import streamlit as st
-import pandas as pd
+import datetime as dt
+import json
+import numpy as np
 import pickle
 
-# Load data
-data = pd.read_csv(r"singapore.csv")
+def regression_model(test_data):
+    with open(r'Decision_Tree_Model.pkl', 'rb' ) as file:
+        model = pickle.load(file)
+        data = model.predict(test_data)[0] ** 2
+        return data
+    
 
-# Create dictionary to get the encoded values
-town_dict = dict(zip(data['town'].unique(), data['town_code'].unique()))
-model_dict = dict(zip(data['flat_model'].unique(), data['flat_modelcode'].unique()))
-town_list = data['town'].unique()
-model_list = data['flat_model'].unique()
-room_category = {'1 ROOM': 1,
-       '2 ROOM':2,
-       '3 ROOM':3,
-       '4 ROOM':4,
-       '5 ROOM':5,
-       'EXECUTIVE':6,
-       'MULTI GENERATION':7}
-type_list = list(room_category.keys())
+#  Load the JSON data into a Python dictionary
+with open(r'Category_Columns_Encoded_Data.json', 'r') as file:
+    data = json.load(file)
 
-# Set page config for the web app
-st.set_page_config(page_title='Resale Price Prediction', layout='wide')
-st.title('Singapore Flat Resale Price Prediction')
 
-# Create columns in UI
-col1,col2,col3,col4 = st.columns(4)
+st.set_page_config(page_title = "Singapore Resale Flat Prices Predicting",
+                   page_icon = "",
+                   layout = "wide",
+                   initial_sidebar_state = "expanded",
+                   menu_items = None)
+
+st.title(":red[Singapore Resale] :blue[Flat Prices] :orange[Prediction]")
+
+col1, col2 = st.columns(2, gap= 'large')
 
 with col1:
-   # Create input field for year input
-   selling_year = st.number_input('Selling Year',value=None, placeholder="yyyy") #number_input
+    date = st.date_input("Select the **Item Date**", dt.date(2017, 1,1), min_value= dt.date(1990, 1, 1), max_value= dt.date(2023, 9,1))
+
+    town = st.selectbox('Select the **Town**', data['town'])
+
+    flat_type = st.selectbox('Select the **Flat Type**', data['flat_type'])
+
+    block = st.selectbox('Select the **Block**', data['block']) 
+
+    street_name = st.selectbox('Select the **Street Name**', data['street_name'])
 
 with col2:
-   # Create input field for month input
-   selling_month = int(st.select_slider('Selling month',options=[1,2,3,4,5,6,7,8,9,10,11,12])) #select_slider
+    storey_range = st.selectbox('Select the **Storey Range**', data['storey_range'])
 
-with col3:
-   # Create input field for town
-   town_key= st.selectbox('Town',options=town_list)
+    floor_area_sqm = st.number_input('Enter the **Floor Area** in square meter', min_value = 28.0, max_value= 173.0, value = 60.0 )
 
-with col4:
-    # Create input field for flat type
-    flat_type_key = st.selectbox('Flat Type',options=type_list)
+    flat_model	= st.selectbox('Select the **flat_Model**', data['flat_model'])
 
-with col1:
-   # Create input field for storey range
-   storey_range = st.text_input('Storey range',value=None, placeholder="ex: 01 TO 03") #text_input
+    lease_commence_date	=st.number_input('Enter the **Lease Commence Year**', min_value = 1966.0, max_value= 2022.0, value = 2017.0 )
+        
+    remaining_lease	= st.selectbox('Select the **Remainig Lease**', data['remaining_lease'])
 
-with col2:
-   # Create input field for floor area
-   floor_area_sqm = st.number_input('Floor Area (sqm)',value=None, placeholder="Type floor area...") #number_input
 
-with col3:
-   # Create input field for flat model
-   flat_model = st.selectbox('Flat Model',options = model_list) #text_input
+storey = storey_range.split(' TO ')
 
-with col4:
-   # Create input field for lease commence date
-   lease_commence_date = st.number_input('Lease Commence Date',value=None, placeholder="yyyy") #number_input
+if remaining_lease == 'Not Specified':
+    is_remaining_lease = 0
+else:
+    is_remaining_lease = 1
 
-# Function to load pickled model
-def model_data():
-   with open("resale_linr_pkl","rb") as files:
-      model=pickle.load(files)
-   return model
+test_data =[[date.month, data['town'][town], data['flat_type'][flat_type], data['block'][block], data['street_name'][street_name],
+                     data['storey_range'][storey_range], floor_area_sqm, data['flat_model'][flat_model], lease_commence_date,
+                     data['remaining_lease'][remaining_lease], date.year, int(storey[0]), int(storey[1]),is_remaining_lease, 
+                     np.sqrt(floor_area_sqm)]]
 
-# Function to predict
-def predict(model,a,b,c,d,e,f,g,h,i):
-   pred_value = model.predict([[a,b,c,d,e,f,g,h,i]])
-   return pred_value 
-
-# Create predict button
-if st.button('Predict Price'):
-    town = town_dict[town_key]
-    flat_type = room_category[flat_type_key]
-
-    # Check if storey_range is not None
-    if storey_range is not None:
-        # Split storey_range and handle the case where it doesn't return two values
-        storey_values = storey_range.split(" TO ")
-        if len(storey_values) == 2:
-            storey_min, storey_max = map(int, storey_values)
-        else:
-            # Handle the case where storey_range doesn't contain two values
-            st.error("Invalid storey range. Please enter a valid range.")
-
-        flat_modelcode = model_dict[flat_model]
-
-        # Call predict function
-        pred = predict(model_data(), selling_year, selling_month, town, flat_type, storey_min, storey_max, floor_area_sqm, flat_modelcode, lease_commence_date)
-
-        # Display predicted price in dollar
-        st.success(f'Predicted Price: ${pred[0]:,.2f}')
-
-        # Display predicted price in INR
-        st.success(f'Resale Price in INR: ₹{(pred[0] * 63.02):,.2f}')
-    else:
-        # Handle the case where storey_range is None
-        st.error("Please enter a valid storey range.")
+st.markdown('Click below button to predict the **Flat Resale Price**')
+prediction = st.button('**Predict**')
 
 
 
-# In[ ]:
+if prediction and test_data:
+  st.markdown(f"### :bule[Flat Resale Price is] :green[$ {round(regression_model(test_data),3)}]")
 
-
-
+  st.markdown(f"### :bule[Flat Resale Price in INR] :green[₹ {round(regression_model(test_data)*61.99,3)}]")
 
